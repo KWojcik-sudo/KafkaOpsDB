@@ -1,0 +1,12 @@
+node_id = "kafkaopsdb-compose"
+
+[storage]
+url = "s3://kafkaopsdb/table"
+options = { aws_endpoint = "http://minio:9000", aws_allow_http = "true" }
+
+[kafka]
+bootstrap_servers = "kafka:9092"
+
+[query]
+listen = "0.0.0.0:8080"
+cache_dir = "/tmp/kafkaopsdb-cache"

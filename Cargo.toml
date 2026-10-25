@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/model", "crates/table", "crates/ingest", "crates/query"]
+members = ["crates/model", "crates/table", "crates/ingest", "crates/query", "crates/server"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,6 +14,11 @@ table = { path = "crates/table" }
 ingest = { path = "crates/ingest" }
 query = { path = "crates/query" }
 async-trait = "0.1"
+axum = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+humantime = "2"
+toml = "0.9"
+ureq = { version = "3", features = ["json"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 datafusion = { version = "55.2", default-features = false, features = ["nested_expressions", "datetime_expressions", "regex_expressions", "string_expressions", "unicode_expressions", "sql"] }
@@ -39,5 +44,11 @@ parquet = { version = "59.2", default-features = false, features = ["arrow", "as
 proptest = "1"
 tempfile = "3"
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
-debug = 1
+debug = false

@@ -312,13 +312,16 @@ async fn run_compaction(
     cfg: &CompactionConfig,
     task: &CompactionTask,
 ) -> Result<(u64, usize)> {
-    let inputs: Vec<(FileFormat, bytes::Bytes)> = futures::stream::iter(&task.inputs)
-        .map(|s| async move { Ok::<_, Error>((s.format.into(), table.read_segment(s).await?)) })
-        .buffered(4)
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<_>>()?;
+    let mut inputs: Vec<(FileFormat, bytes::Bytes)> = Vec::with_capacity(task.inputs.len());
+    let mut reads = futures::stream::iter(task.inputs.clone())
+        .map(|s| async move {
+            let data = table.read_segment(&s).await?;
+            Ok::<_, Error>((FileFormat::from(s.format), data))
+        })
+        .buffered(4);
+    while let Some(r) = reads.next().await {
+        inputs.push(r?);
+    }
     let input_bytes = task.input_bytes();
     let input_rows: u64 = task.inputs.iter().map(|s| s.rows).sum();
     let kind = task.kind.clone();

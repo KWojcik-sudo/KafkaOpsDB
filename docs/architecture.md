@@ -126,7 +126,8 @@ więc zapytania przekrojowe (np. śledzenie `correlation-id` przez cały przepł
 SELECT * FROM topics WHERE headers.`correlation-id` = '632543-gdsf2-fgdsd2';
 ```
 
-Parser (`sqlparser-rs`) przepisuje wyrażenie ``headers.`x` `` na wywołanie UDF `header(headers, 'x')`, które
+Parser (`sqlparser-rs`, dialekt MySQL: backticki i `offset` / `partition` / `timestamp` jako zwykłe nazwy
+kolumn) przepisuje wyrażenie ``headers.`x` `` na wywołanie UDF `header(headers, 'x')`, które
 zwraca pierwszą wartość headera `x` jako string (`NULL`, gdy go nie ma). Wszystkie wartości zwraca
 `header_all(headers, 'x')`. `TableProvider` rozpoznaje `header(headers, 'k') = 'v'` i `... IN (...)` i używa
 ich do pruningu: manifest (`header_keys`), bloom filtry i statystyki kolumn pivot `__h:k`.

@@ -1,0 +1,50 @@
+# KafkaOpsDB standalone configuration. Every section except [storage] and [kafka] is optional.
+node_id = "kafkaopsdb-1"
+
+[storage]
+# s3://bucket/prefix, az://container/prefix, gs://bucket/prefix or file:///mnt/nfs/kafkaopsdb.
+# Cloud credentials come from the usual environment variables (AWS_ACCESS_KEY_ID, AZURE_STORAGE_ACCOUNT_NAME, ...).
+url = "file:///var/lib/kafkaopsdb"
+# options = { aws_endpoint = "http://minio:9000", aws_allow_http = "true", aws_region = "us-east-1" }
+
+[kafka]
+bootstrap_servers = "localhost:9092"
+# passed verbatim to librdkafka
+# properties = { "security.protocol" = "SASL_SSL", "sasl.mechanism" = "PLAIN", "sasl.username" = "...", "sasl.password" = "..." }
+
+[ingest]
+include = [".*"]
+exclude = ["^__", "^_schemas$"]
+initial_position = "earliest"
+parallelism = 4
+task_max_bytes = "256MiB"
+flush_min_bytes = "16MiB"
+max_flush_age = "30s"
+l0_parquet_min_rows = 25000
+
+[compaction]
+l0_min_files = 8
+l0_max_age = "5m"
+l1_target_bytes = "256MiB"
+l2_promote_min_bytes = "128MiB"
+l2_target_bytes = "512MiB"
+
+[pivot]
+always = ["correlation-id"]
+min_fraction = 0.01
+max_keys = 64
+
+[[retention]]
+topics = "^audit\\."
+retention = "30d"
+
+[query]
+listen = "0.0.0.0:8080"
+cache_dir = "/var/cache/kafkaopsdb"
+cache_disk_bytes = "20GiB"
+cache_memory_bytes = "1GiB"
+
+[vacuum]
+interval = "10m"
+tombstone_grace = "1h"
+orphan_grace = "24h"

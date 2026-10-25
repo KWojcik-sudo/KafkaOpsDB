@@ -31,6 +31,36 @@ Założenia:
 | [docs/commit-protocol.md](docs/commit-protocol.md) | Commit log, checkpointy, konflikty, exactly-once, vacuum |
 | [docs/distributed.md](docs/distributed.md) | Master / worker, lease'y, pending tasks, recovery |
 
-## Status
+## Quickstart
 
-W trakcie implementacji (Rust): gotowe `model`, `table`, `ingest`; dalej kompakcja, `query`, `server` – patrz roadmapa w [docs/architecture.md](docs/architecture.md#9-roadmapa).
+```bash
+cargo build --release -p kafkaopsdb
+cp deploy/kafkaopsdb.toml kafkaopsdb.toml   # set [storage] url and [kafka] bootstrap_servers
+target/release/kafkaopsdb standalone --config kafkaopsdb.toml
+
+target/release/kafkaopsdb sql "SELECT topic, partition, offset, timestamp FROM topics WHERE headers.\`correlation-id\` = 'abc'"
+target/release/kafkaopsdb sql --format json "SELECT topic, COUNT(*) FROM topics GROUP BY topic"
+target/release/kafkaopsdb status
+```
+
+HTTP API: `POST /v1/query` (`{"sql": "...", "format": "json" | "ndjson" | "table"}`), `GET /v1/status`,
+`GET /metrics` (Prometheus), `GET /health`.
+
+The full stack (Kafka + MinIO + KafkaOpsDB) can be started with `docker compose -f deploy/docker-compose.yml up --build`.
+
+## Crates
+
+| Crate | Role |
+|---|---|
+| `crates/model` | record schema, header pivots, Parquet/Avro files |
+| `crates/table` | commit log on object storage (exactly-once offsets, checkpoints, vacuum) |
+| `crates/ingest` | Kafka source, planner, ingest workers, compaction tasks |
+| `crates/query` | SQL on DataFusion with manifest / statistics / bloom filter pruning, cache |
+| `crates/server` | `kafkaopsdb` binary: standalone mode, HTTP API, CLI |
+
+## Tests
+
+```bash
+cargo test --workspace   # unit, property and in-process end-to-end tests
+scripts/e2e.sh           # real Kafka (KRaft) + standalone, kill -9 / restart, SQL assertions
+```
