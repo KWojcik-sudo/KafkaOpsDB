@@ -117,6 +117,8 @@ fn main() {
             producer.poll(Duration::ZERO);
         }
         if transactional {
+            // delivery reports must be served before the transaction can end
+            producer.flush(timeout).expect("flush");
             if abort_every > 0 && batch_no % abort_every == abort_every - 1 {
                 producer.abort_transaction(timeout).expect("abort");
             } else {
