@@ -12,6 +12,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("read failed: {0}")]
     Read(String),
+    #[error("not found: {0}")]
+    NotFound(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

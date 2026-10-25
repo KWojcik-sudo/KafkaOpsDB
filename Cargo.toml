@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/kseg", "crates/table"]
+members = ["crates/kseg", "crates/table", "crates/ingest"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,14 +11,19 @@ repository = "https://github.com/KWojcik-sudo/KafkaOpsDB"
 [workspace.dependencies]
 kseg = { path = "crates/kseg" }
 table = { path = "crates/table" }
+ingest = { path = "crates/ingest" }
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 futures = "0.3"
 object_store = { version = "0.13", features = ["aws", "azure", "gcp", "http"] }
 rand = "0.9"
+rdkafka = { version = "0.39", default-features = false, features = ["libz", "ssl", "zstd"] }
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tokio-util = "0.7"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 bytes = "1"
 crc32c = "0.6"

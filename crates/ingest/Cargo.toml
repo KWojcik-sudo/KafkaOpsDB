@@ -1,0 +1,29 @@
+[package]
+name = "ingest"
+description = "KafkaOpsDB indexer: Kafka source, planner, workers and compaction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["kafka"]
+kafka = ["dep:rdkafka"]
+sasl = ["kafka", "rdkafka/sasl"]
+
+[dependencies]
+async-trait.workspace = true
+futures.workspace = true
+kseg.workspace = true
+object_store.workspace = true
+rdkafka = { workspace = true, optional = true }
+regex.workspace = true
+serde.workspace = true
+table.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
