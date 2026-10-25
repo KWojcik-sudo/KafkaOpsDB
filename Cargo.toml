@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["crates/kseg"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/KWojcik-sudo/KafkaOpsDB"
+
+[workspace.dependencies]
+kseg = { path = "crates/kseg" }
+async-trait = "0.1"
+bytes = "1"
+crc32c = "0.6"
+thiserror = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
+zstd = "0.13"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "fs"] }
+arrow = "59.2"
+parquet = { version = "59.2", default-features = false, features = ["arrow", "zstd"] }
+proptest = "1"
+tempfile = "3"
+
+[profile.release]
+debug = 1

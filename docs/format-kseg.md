@@ -203,7 +203,7 @@ Kod `encoding` w `ChunkMeta`. Payload opisany poniżej jest kompresowany wg `com
 |---|---|---|---|
 | 0 | `Const` | int / bytes | jedna wartość (`zvarint` lub `bytes`) |
 | 1 | `BitPackedFor` | int | strony po 1024 wartości: `min: zvarint`, `bit_width: u8`, bitpacked `(v - min)` |
-| 2 | `DeltaOfDelta` | int (timestamp) | `first: zvarint`, `first_delta: zvarint`, potem `BitPackedFor` nad zigzag(Δ²) |
+| 2 | `DeltaOfDelta` | int (timestamp) | `first: zvarint`, `first_delta: zvarint`, potem `BitPackedFor` nad Δ² (FOR sam obsługuje wartości ujemne) |
 | 3 | `OffsetGaps` | offset | `[ (row_delta: varint, extra_gap: varint) ]`. `offset[i] = first_offset + i + Σ extra_gap` dla luk w wierszach ≤ i. Luki to markery transakcji, compacted topics, aborted records |
 | 4 | `Rle` | int / bool | `[ (run_len: varint, value: zvarint) ]` |
 | 5 | `Bitmap` | bool | bitpacked z `bit_width = 1` |
@@ -232,7 +232,7 @@ Indeksowane są kolumny `key` (3) i wszystkie kolumny wartości headerów (16+),
 | brak | kolumna nieindeksowana | | blok zawsze kandydatem |
 
 **Bloom:** Split Block Bloom Filter zgodny z algorytmem z Parquet: bloki po 256 bitów (8 × u32), 8 stałych
-soli, hash `xxh64`. Rozmiar = `next_pow2(ceil(NDV × bloom_bits_per_value / 8))` bajtów, minimum 32 B.
+soli, hash `xxh64`. Rozmiar = `ceil(NDV × bloom_bits_per_value / 8)` bajtów zaokrąglone w górę do wielokrotności 32 B (minimum 32 B). Indeks bloku liczony jest przez multiply-shift, więc liczba bloków nie musi być potęgą dwójki.
 Bloom jest wymiarowany po NDV w bloku, a nie po liczbie wierszy.
 
 **Narzut:** ~1,25 B na unikalną wartość na indeksowaną kolumnę o wysokiej kardynalności przy 10 bit/wartość.
@@ -257,22 +257,37 @@ Kolumny o niskiej kardynalności (`content-type`, `source`) kosztują pomijalnie
 4. Na końcu zapisuje index section, footer i trailer.
 5. Writer zwraca metadane dla manifestu: `footer_offset`, `footer_len`, zakresy per topic / partycja, rozmiary.
 
-## 9. Szacunek rozmiaru (do weryfikacji w benchmarku M1)
+## 9. Rozmiar – pomiar
 
-Typowa wiadomość: key = UUID, headery `correlation-id` (UUID), `traceparent`, `content-type`, `source`,
-`event-type`.
+`cargo run -p kseg --example compression_report --release` generuje 500 000 syntetycznych wiadomości
+(6 partycji): key = losowy UUID, headery `correlation-id` (losowy UUID), `traceparent` (losowe 32 + 16 hex),
+`content-type`, `source`, `event-type`, a w 5% wiadomości dodatkowo `retry`.
 
-| Kolumna | Szac. B / wiersz |
+| Wariant | B / wiersz |
 |---|---|
-| offset, partition, topic, timestamp_type, shape, schema_id | < 0,5 |
-| timestamp | 1–2 |
-| value_size | 1–2 |
-| key (Uuid16) | 16 |
-| correlation-id (Uuid16) | 16 |
-| traceparent (BytesPlain + zstd; z `HexText` ~25) | ~40 |
-| content-type, source, event-type | < 0,5 |
-| indeksy (3 kolumny wysokiej kardynalności) | ~4 |
-| **razem** | **~80** (surowe metadane ~250–300 B) |
+| surowe metadane | 242,1 |
+| Parquet (list<struct<key, value>> dla headerów, zstd 3) | 82,1 |
+| **KSEG (z indeksami)** | **66,6** |
+
+Rozbicie KSEG:
+
+| Kolumna | B / wiersz |
+|---|---|
+| offset, timestamp_type, value_schema_id, header_shape | < 0,1 |
+| timestamp | 0,85 |
+| value_size | 1,38 |
+| key (Uuid16) | 16,00 |
+| correlation-id (Uuid16) | 16,00 |
+| traceparent (zstd) | 27,60 |
+| content-type, source, event-type, retry | 0,91 |
+| index section (bloomy dla key, correlation-id, traceparent) | 3,76 |
+
+Wnioski: wszystko poza losowymi identyfikatorami kosztuje łącznie < 4 B/wiersz. Reszta to entropia
+samych identyfikatorów, której żaden format nie usunie. Kolejny realny zysk dałoby kodowanie `HexText`
+dla `traceparent` (~24 B → 16+8 B binarnie).
+
+Pominięte w MVP: obcinanie dużych kluczy (`max_key_bytes`, kolumna 4 `key_size` nie jest jeszcze zapisywana)
+oraz limit `max_shapes`.
 
 ## 10. Wersjonowanie
 
