@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/model", "crates/table", "crates/ingest"]
+members = ["crates/model", "crates/table", "crates/ingest", "crates/query"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,8 +12,11 @@ repository = "https://github.com/KWojcik-sudo/KafkaOpsDB"
 model = { path = "crates/model" }
 table = { path = "crates/table" }
 ingest = { path = "crates/ingest" }
+query = { path = "crates/query" }
 async-trait = "0.1"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+datafusion = { version = "55.2", default-features = false, features = ["nested_expressions", "datetime_expressions", "regex_expressions", "string_expressions", "unicode_expressions", "sql"] }
 futures = "0.3"
 object_store = { version = "0.13", features = ["aws", "azure", "gcp", "http"] }
 rand = "0.9"
