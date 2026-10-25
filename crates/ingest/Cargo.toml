@@ -11,7 +11,9 @@ kafka = ["dep:rdkafka"]
 sasl = ["kafka", "rdkafka/sasl"]
 
 [dependencies]
+arrow.workspace = true
 async-trait.workspace = true
+bytes.workspace = true
 futures.workspace = true
 model.workspace = true
 object_store.workspace = true

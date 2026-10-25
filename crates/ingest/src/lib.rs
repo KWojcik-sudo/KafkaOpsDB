@@ -1,6 +1,7 @@
 //! KafkaOpsDB indexer: reads Kafka ranges, writes KSEG segments and commits them
 //! atomically with the offsets (docs/architecture.md §6, docs/distributed.md).
 
+pub mod compaction;
 pub mod error;
 #[cfg(feature = "kafka")]
 pub mod kafka;
@@ -9,6 +10,10 @@ pub mod service;
 pub mod source;
 pub mod worker;
 
+pub use compaction::{
+    CompactionConfig, CompactionKind, CompactionOutcome, CompactionPlanner, CompactionReport,
+    CompactionService, CompactionTask, RetentionRule, execute_compaction,
+};
 pub use error::{Error, Result};
 pub use planner::{IngestTask, InitialPosition, Plan, Planner, PlannerConfig};
 pub use service::{IngestService, IngestStats, PartitionLag, ServiceConfig, StepReport};

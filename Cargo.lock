@@ -1001,7 +1001,9 @@ dependencies = [
 name = "ingest"
 version = "0.1.0"
 dependencies = [
+ "arrow",
  "async-trait",
+ "bytes",
  "futures",
  "model",
  "object_store",
