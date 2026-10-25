@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use kseg::{Header, Record, SegmentType, SegmentWriter, WriterOptions};
+use model::{FileFormat, FileStats, Header, ParquetOptions, Record};
 use object_store::memory::InMemory;
 use object_store::path::Path;
 use object_store::{
@@ -13,10 +13,9 @@ use object_store::{
     ObjectStoreExt, PutMultipartOptions, PutOptions, PutPayload, PutResult,
 };
 use table::{
-    Action, OffsetRange, OffsetReset, Operation, RemoveSegment, Table, TableConfig, VacuumConfig,
-    now_ms, open_store, self_test,
+    Action, OffsetRange, OffsetReset, Operation, RemoveSegment, SegmentMeta, Table, TableConfig,
+    VacuumConfig, now_ms, open_store, self_test,
 };
-use uuid::Uuid;
 
 fn range(topic: &str, partition: i32, start: i64, end: i64) -> Action {
     Action::OffsetRange(OffsetRange {
@@ -280,22 +279,26 @@ async fn ambiguous_write_is_resolved_by_txn_id() {
     assert_eq!(t.snapshot().committed("t", 0), Some(10));
 }
 
-fn sample_segment(topic: &str, offsets: std::ops::Range<i64>) -> (Vec<u8>, kseg::SegmentSummary) {
-    let mut w = SegmentWriter::new(SegmentType::Topic, 0, WriterOptions::default());
-    w.add(
-        topic,
-        0,
-        offsets
-            .map(|o| Record {
-                offset: o,
-                timestamp: 1_761_379_200_000 + o,
-                headers: vec![Header::new("correlation-id", format!("c-{o}"))],
-                ..Default::default()
-            })
-            .collect(),
+fn sample_segment(topic: &str, offsets: std::ops::Range<i64>) -> (Vec<u8>, SegmentMeta) {
+    let records: Vec<Record> = offsets
+        .map(|o| Record {
+            offset: o,
+            timestamp: 1_761_379_200_000 + o,
+            headers: vec![Header::new("correlation-id", format!("c-{o}"))],
+            ..Default::default()
+        })
+        .collect();
+    let batch = model::records_to_batch([(topic, 0, records.as_slice())]).unwrap();
+    let meta = SegmentMeta {
+        format: FileFormat::Parquet,
+        level: 2,
+        stats: FileStats::from_batch(&batch).unwrap(),
+        pivot_keys: Vec::new(),
+    };
+    (
+        model::write_parquet(&batch, &ParquetOptions::l0()).unwrap(),
+        meta,
     )
-    .unwrap();
-    w.finish(Uuid::now_v7(), now_ms(), "test").unwrap()
 }
 
 #[tokio::test]
@@ -316,7 +319,12 @@ async fn checkpoints_segments_and_vacuum() {
     for i in 0..5i64 {
         let (data, summary) = sample_segment("orders", i * 10..i * 10 + 10);
         let add = t.put_segment(data, &summary).await.unwrap();
-        assert!(add.path.starts_with("data/topic=orders/date="));
+        assert!(
+            add.path.starts_with("data/l2/topic=orders/date="),
+            "{}",
+            add.path
+        );
+        assert_eq!(t.read_segment(&add).await.unwrap().len() as u64, add.size);
         segment_ids.push(add.segment_id);
         t.commit(
             Operation::Ingest,

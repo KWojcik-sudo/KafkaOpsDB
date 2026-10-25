@@ -12,8 +12,8 @@ pub enum Error {
     },
     #[error("table: {0}")]
     Table(#[from] table::Error),
-    #[error("segment: {0}")]
-    Segment(#[from] kseg::Error),
+    #[error("data file: {0}")]
+    Model(#[from] model::Error),
     #[error("configuration: {0}")]
     Config(String),
     #[error("task panicked: {0}")]

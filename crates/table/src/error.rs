@@ -8,8 +8,6 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
-    #[error("segment: {0}")]
-    Segment(#[from] kseg::Error),
     #[error("corrupt table: {0}")]
     Corrupt(String),
     /// The commit's preconditions no longer hold; the caller must discard its work.

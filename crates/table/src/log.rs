@@ -13,7 +13,8 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::actions::{
-    Action, AddSegment, CommitInfo, Operation, Protocol, READER_VERSION, TableMeta, WRITER_VERSION,
+    Action, AddSegment, CommitInfo, Operation, Protocol, READER_VERSION, SegmentMeta, TableMeta,
+    WRITER_VERSION,
 };
 use crate::error::{Error, Result};
 use crate::snapshot::{CheckpointData, Snapshot};
@@ -391,14 +392,13 @@ impl Table {
         Ok(())
     }
 
-    /// Uploads a segment file and returns its manifest entry (not yet committed).
-    pub async fn put_segment(
-        &self,
-        data: Vec<u8>,
-        summary: &kseg::SegmentSummary,
-    ) -> Result<AddSegment> {
-        let rel = segment_rel_path(summary);
+    /// Uploads a data file and returns its manifest entry (not yet committed).
+    pub async fn put_segment(&self, data: Vec<u8>, meta: &SegmentMeta) -> Result<AddSegment> {
+        let segment_id = Uuid::now_v7();
+        let created_at = now_ms();
+        let rel = segment_rel_path(segment_id, created_at, meta);
         let path = self.path_of(&rel);
+        let size = data.len() as u64;
         if data.len() > MULTIPART_THRESHOLD {
             let upload = self.store.put_multipart(&path).await?;
             let mut w = WriteMultipart::new_with_chunk_size(upload, MULTIPART_CHUNK);
@@ -407,7 +407,17 @@ impl Table {
         } else {
             self.store.put(&path, data.into()).await?;
         }
-        Ok(AddSegment::from_summary(rel, summary))
+        Ok(AddSegment::new(segment_id, rel, size, created_at, meta))
+    }
+
+    /// Reads a whole data file.
+    pub async fn read_segment(&self, add: &AddSegment) -> Result<Bytes> {
+        Ok(self
+            .store
+            .get(&self.path_of(&add.path))
+            .await?
+            .bytes()
+            .await?)
     }
 }
 
@@ -416,16 +426,15 @@ fn backoff(attempt: u32) -> Duration {
     Duration::from_millis(base + rand::rng().random_range(0..base))
 }
 
-pub fn segment_rel_path(s: &kseg::SegmentSummary) -> String {
-    let date = chrono::DateTime::from_timestamp_millis(s.created_at_ms)
+/// `data/l0/…`, `data/l1/…` or, for single-topic L2 files, `data/l2/topic=<t>/…`.
+pub fn segment_rel_path(segment_id: Uuid, created_at: i64, meta: &SegmentMeta) -> String {
+    let date = chrono::DateTime::from_timestamp_millis(created_at)
         .unwrap_or_default()
         .format("%Y-%m-%d");
-    match s.segment_type {
-        kseg::SegmentType::Topic => format!(
-            "data/topic={}/date={date}/{}.kseg",
-            s.topics[0].topic, s.segment_id
-        ),
-        kseg::SegmentType::Mixed => format!("data/mixed/date={date}/{}.kseg", s.segment_id),
+    let ext = meta.format.extension();
+    match (meta.level, meta.stats.topics.as_slice()) {
+        (2, [t]) => format!("data/l2/topic={}/date={date}/{segment_id}.{ext}", t.topic),
+        (level, _) => format!("data/l{level}/date={date}/{segment_id}.{ext}"),
     }
 }
 

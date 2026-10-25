@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
-use kseg::Record;
+use model::Record;
 
 use crate::error::{Error, Result};
 

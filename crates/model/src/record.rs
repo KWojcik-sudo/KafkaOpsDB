@@ -15,6 +15,14 @@ impl TimestampType {
         }
     }
 
+    pub fn parse(s: &str) -> Self {
+        if s == "LogAppendTime" {
+            Self::LogAppendTime
+        } else {
+            Self::CreateTime
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CreateTime => "CreateTime",

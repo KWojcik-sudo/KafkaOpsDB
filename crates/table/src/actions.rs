@@ -59,11 +59,27 @@ pub enum SegmentKind {
     Mixed,
 }
 
-impl From<kseg::SegmentType> for SegmentKind {
-    fn from(t: kseg::SegmentType) -> Self {
-        match t {
-            kseg::SegmentType::Topic => Self::Topic,
-            kseg::SegmentType::Mixed => Self::Mixed,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DataFormat {
+    Parquet,
+    Avro,
+}
+
+impl From<model::FileFormat> for DataFormat {
+    fn from(f: model::FileFormat) -> Self {
+        match f {
+            model::FileFormat::Parquet => Self::Parquet,
+            model::FileFormat::Avro => Self::Avro,
+        }
+    }
+}
+
+impl From<DataFormat> for model::FileFormat {
+    fn from(f: DataFormat) -> Self {
+        match f {
+            DataFormat::Parquet => Self::Parquet,
+            DataFormat::Avro => Self::Avro,
         }
     }
 }
@@ -91,34 +107,56 @@ pub struct AddSegment {
     pub segment_id: Uuid,
     /// Path relative to the table root.
     pub path: String,
-    pub segment_type: SegmentKind,
+    pub format: DataFormat,
+    /// 0 = written by ingest, 1 = compacted multi-topic, 2 = compacted single topic.
     pub level: u8,
+    pub segment_type: SegmentKind,
     pub size: u64,
     pub rows: u64,
-    pub footer_offset: u64,
-    pub footer_len: u64,
-    pub format_version: u16,
     pub created_at: i64,
+    /// Every header key present in the file.
     #[serde(default)]
     pub header_keys: Vec<String>,
+    /// Header keys with a `__h:<key>` pivot column (Parquet only).
+    #[serde(default)]
+    pub pivot_keys: Vec<String>,
     pub topics: Vec<TopicEntry>,
 }
 
+/// What a writer knows about a data file before it is uploaded.
+#[derive(Debug, Clone)]
+pub struct SegmentMeta {
+    pub format: model::FileFormat,
+    pub level: u8,
+    pub stats: model::FileStats,
+    pub pivot_keys: Vec<String>,
+}
+
 impl AddSegment {
-    pub fn from_summary(path: String, s: &kseg::SegmentSummary) -> Self {
+    pub fn new(
+        segment_id: Uuid,
+        path: String,
+        size: u64,
+        created_at: i64,
+        m: &SegmentMeta,
+    ) -> Self {
         Self {
-            segment_id: s.segment_id,
+            segment_id,
             path,
-            segment_type: s.segment_type.into(),
-            level: s.level,
-            size: s.size,
-            rows: s.rows,
-            footer_offset: s.footer_offset,
-            footer_len: s.footer_len,
-            format_version: kseg::footer::FORMAT_VERSION,
-            created_at: s.created_at_ms,
-            header_keys: s.header_keys.clone(),
-            topics: s
+            format: m.format.into(),
+            level: m.level,
+            segment_type: if m.stats.topics.len() == 1 {
+                SegmentKind::Topic
+            } else {
+                SegmentKind::Mixed
+            },
+            size,
+            rows: m.stats.rows,
+            created_at,
+            header_keys: m.stats.header_keys.clone(),
+            pivot_keys: m.pivot_keys.clone(),
+            topics: m
+                .stats
                 .topics
                 .iter()
                 .map(|t| TopicEntry {

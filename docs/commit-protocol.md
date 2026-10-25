@@ -61,15 +61,15 @@ Plik wersji zawiera newline-delimited JSON, jedna akcja na linię.
 // dodanie segmentu (manifest – wystarcza do pruningu bez otwierania pliku)
 {"add": {
   "segment_id": "0192f4...",
-  "path": "data/mixed/date=2026-10-25/0192f4....kseg",
-  "segment_type": "mixed",        // topic | mixed
-  "level": 0,
+  "path": "data/l0/date=2026-10-25/0192f4....avro",
+  "format": "avro",               // avro | parquet
+  "level": 0,                     // 0 | 1 | 2
+  "segment_type": "mixed",        // topic (jeden topic) | mixed
   "size": 1048576,
   "rows": 12000,
-  "footer_offset": 1040000,
-  "footer_len": 8576,
-  "format_version": 1,
   "created_at": 1761379230000,
+  "header_keys": ["correlation-id", "source"],
+  "pivot_keys": [],               // kolumny __h:<klucz> (tylko Parquet)
   "topics": [
     {"topic": "orders.v1", "ts_min": 1761379000000, "ts_max": 1761379229000,
      "partitions": [{"partition": 0, "first_offset": 1000, "last_offset": 1999, "rows": 1000}]}

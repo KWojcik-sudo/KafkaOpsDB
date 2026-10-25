@@ -13,7 +13,7 @@ sasl = ["kafka", "rdkafka/sasl"]
 [dependencies]
 async-trait.workspace = true
 futures.workspace = true
-kseg.workspace = true
+model.workspace = true
 object_store.workspace = true
 rdkafka = { workspace = true, optional = true }
 regex.workspace = true

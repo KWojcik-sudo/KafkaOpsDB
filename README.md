@@ -1,7 +1,7 @@
 # KafkaOpsDB
 
 Indeks metadanych wiadomości Kafki (topic, partition, offset, timestamp, key, headers, rozmiary – wszystko poza `value`)
-przechowywany we własnym formacie kolumnowym na object storage (S3 / ABFS / GCS / NFS), z silnikiem SQL do
+przechowywany jako Parquet / Avro na object storage (S3 / ABFS / GCS / NFS), z silnikiem SQL do
 szybkich point-lookupów:
 
 ```sql
@@ -27,10 +27,10 @@ Założenia:
 | Dokument | Zawartość |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Cele, prior art, komponenty, model danych, SQL, deployment, roadmapa |
-| [docs/format-kseg.md](docs/format-kseg.md) | Specyfikacja binarna formatu segmentu `KSEG` |
+| [docs/storage-format.md](docs/storage-format.md) | Schemat, pivoty headerów, poziomy L0 (Avro/Parquet) → L1 → L2 |
 | [docs/commit-protocol.md](docs/commit-protocol.md) | Commit log, checkpointy, konflikty, exactly-once, vacuum |
 | [docs/distributed.md](docs/distributed.md) | Master / worker, lease'y, pending tasks, recovery |
 
 ## Status
 
-Faza projektowa (M0). Implementacja w Rust – patrz roadmapa w [docs/architecture.md](docs/architecture.md#roadmapa).
+W trakcie implementacji (Rust): gotowe `model`, `table`, `ingest`; dalej kompakcja, `query`, `server` – patrz roadmapa w [docs/architecture.md](docs/architecture.md#9-roadmapa).

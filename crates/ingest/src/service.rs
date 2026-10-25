@@ -45,8 +45,8 @@ pub struct IngestStats {
     pub conflicts: AtomicU64,
     pub failures: AtomicU64,
     pub resets: AtomicU64,
-    pub segments_topic: AtomicU64,
-    pub segments_mixed: AtomicU64,
+    pub l0_avro_files: AtomicU64,
+    pub l0_parquet_files: AtomicU64,
     pub segment_bytes: AtomicU64,
 }
 
@@ -158,13 +158,13 @@ impl IngestService {
                     s.records.fetch_add(r.stats.records, Ordering::Relaxed);
                     s.metadata_bytes
                         .fetch_add(r.stats.metadata_bytes, Ordering::Relaxed);
-                    for (kind, size) in &r.stats.segments {
-                        match kind {
-                            table::SegmentKind::Topic => {
-                                s.segments_topic.fetch_add(1, Ordering::Relaxed)
+                    for (format, size) in &r.stats.segments {
+                        match format {
+                            table::DataFormat::Avro => {
+                                s.l0_avro_files.fetch_add(1, Ordering::Relaxed)
                             }
-                            table::SegmentKind::Mixed => {
-                                s.segments_mixed.fetch_add(1, Ordering::Relaxed)
+                            table::DataFormat::Parquet => {
+                                s.l0_parquet_files.fetch_add(1, Ordering::Relaxed)
                             }
                         };
                         s.segment_bytes.fetch_add(*size, Ordering::Relaxed);

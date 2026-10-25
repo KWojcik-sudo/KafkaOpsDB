@@ -1,9 +1,9 @@
 //! Decides what to index next (docs/architecture.md §6).
 //!
 //! A topic becomes *due* when its estimated unindexed metadata reaches
-//! `topic_segment_min_bytes` (it will get its own `topic` segment) or when it has been
-//! waiting for `max_flush_age` (small topics are then packed together into `mixed`
-//! segments). Due topics are taken whole, so data of a topic stays together.
+//! `flush_min_bytes` (such topics get tasks, and so L0 files, of their own) or when it has been
+//! waiting for `max_flush_age` (small topics are then packed together into one
+//! multi-topic task). Due topics are taken whole, so data of a topic stays together.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -24,7 +24,7 @@ pub enum InitialPosition {
 pub struct PlannerConfig {
     pub include: Vec<Regex>,
     pub exclude: Vec<Regex>,
-    pub topic_segment_min_bytes: u64,
+    pub flush_min_bytes: u64,
     pub max_flush_age: Duration,
     /// Upper bound of the estimated metadata held by one task (the per-worker buffer).
     pub task_max_bytes: u64,
@@ -42,7 +42,7 @@ impl Default for PlannerConfig {
                 Regex::new("^__").unwrap(),
                 Regex::new("^_schemas$").unwrap(),
             ],
-            topic_segment_min_bytes: 16 << 20,
+            flush_min_bytes: 16 << 20,
             max_flush_age: Duration::from_secs(30),
             task_max_bytes: 256 << 20,
             max_records_per_partition: 2_000_000,
@@ -164,7 +164,7 @@ impl Planner {
             }
             let lag: i64 = lagging.iter().map(|(_, s, hw)| hw - s).sum();
             let estimated = lag as f64 * avg;
-            let due = estimated >= self.cfg.topic_segment_min_bytes as f64
+            let due = estimated >= self.cfg.flush_min_bytes as f64
                 || now.duration_since(oldest) >= self.cfg.max_flush_age;
             if due {
                 candidates.push(Candidate {
@@ -180,7 +180,7 @@ impl Planner {
         let budget = self.cfg.task_max_bytes as f64;
         let mut current: Option<IngestTask> = None;
         for c in candidates {
-            let hot = c.estimated >= self.cfg.topic_segment_min_bytes as f64;
+            let hot = c.estimated >= self.cfg.flush_min_bytes as f64;
             let per_partition_cap =
                 ((budget / c.avg) as i64).clamp(1, self.cfg.max_records_per_partition);
             let ranges: Vec<(FetchRange, f64)> = c

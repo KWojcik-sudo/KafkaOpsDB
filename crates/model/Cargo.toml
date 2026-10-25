@@ -1,0 +1,16 @@
+[package]
+name = "model"
+description = "KafkaOpsDB data model: record schema and Parquet/Avro files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arrow.workspace = true
+arrow-avro.workspace = true
+bytes.workspace = true
+parquet.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

@@ -7,10 +7,10 @@ use ingest::{
     FetchRange, IngestService, IngestTask, InitialPosition, KafkaSource, MemorySource,
     PlannerConfig, ServiceConfig, TaskOutcome, WorkerConfig, execute_task,
 };
-use kseg::{Header, Projection, Record};
+use model::{Header, Record};
 use object_store::memory::InMemory;
 use object_store::path::Path;
-use table::{SegmentKind, Table, TableConfig};
+use table::{DataFormat, SegmentKind, Table, TableConfig};
 
 fn record(i: i64, topic: &str) -> Record {
     Record {
@@ -39,15 +39,12 @@ async fn new_table() -> Arc<Table> {
 fn config(min_bytes: u64, max_flush_age: Duration) -> ServiceConfig {
     ServiceConfig {
         planner: PlannerConfig {
-            topic_segment_min_bytes: min_bytes,
+            flush_min_bytes: min_bytes,
             max_flush_age,
             task_max_bytes: 4 << 20,
             ..Default::default()
         },
-        worker: WorkerConfig {
-            topic_segment_min_bytes: min_bytes,
-            ..Default::default()
-        },
+        worker: WorkerConfig::default(),
         parallelism: 4,
         tick: Duration::from_millis(10),
         metadata_refresh: Duration::ZERO,
@@ -59,12 +56,11 @@ async fn indexed(table: &Table) -> BTreeMap<(String, i32), Vec<i64>> {
     let snap = table.refresh().await.unwrap();
     let mut out: BTreeMap<(String, i32), Vec<i64>> = BTreeMap::new();
     for seg in snap.segments.values() {
-        let reader = table.open_segment(seg).await.unwrap();
-        for b in 0..reader.footer().blocks.len() {
-            let block = reader.read_block(b, &Projection::default()).await.unwrap();
-            out.entry((block.topic().to_owned(), block.partition))
-                .or_default()
-                .extend(&block.offsets);
+        let data = table.read_segment(seg).await.unwrap();
+        for batch in model::read_file(seg.format.into(), data).unwrap() {
+            for (topic, partition, r) in model::batch_to_records(&batch).unwrap() {
+                out.entry((topic, partition)).or_default().push(r.offset);
+            }
         }
     }
     for v in out.values_mut() {
@@ -113,7 +109,7 @@ async fn indexes_everything_exactly_once() {
             Some(source.high_watermark(topic, *p))
         );
     }
-    assert!(svc.stats.segments_topic.load(Ordering::Relaxed) > 0);
+    assert!(svc.stats.l0_avro_files.load(Ordering::Relaxed) > 0);
     assert!(svc.lag().iter().all(|l| l.lag == 0));
 
     // more data arrives; only the new records are indexed
@@ -146,12 +142,17 @@ async fn crash_before_commit_and_duplicate_workers() {
 
     // a worker that dies after uploading but before committing leaves only an orphan
     let fetched = source.fetch(&task.ranges).await.unwrap();
-    let mut w = kseg::SegmentWriter::new(kseg::SegmentType::Mixed, 0, Default::default());
-    w.add("t", 0, fetched[0].records.clone()).unwrap();
-    let (data, summary) = w
-        .finish(uuid::Uuid::now_v7(), table::now_ms(), "dead")
+    let batch = model::records_to_batch([("t", 0, fetched[0].records.as_slice())]).unwrap();
+    let meta = table::SegmentMeta {
+        format: model::FileFormat::Avro,
+        level: 0,
+        stats: model::FileStats::from_batch(&batch).unwrap(),
+        pivot_keys: Vec::new(),
+    };
+    table
+        .put_segment(model::write_avro(&batch).unwrap(), &meta)
+        .await
         .unwrap();
-    table.put_segment(data, &summary).await.unwrap();
     assert!(indexed(&table).await.is_empty());
 
     // two workers race on the same task: exactly one commit wins
@@ -205,44 +206,57 @@ async fn quiet_topics_share_one_mixed_segment() {
     assert_eq!(snap.segments.len(), 1);
     let seg = snap.segments.values().next().unwrap();
     assert_eq!(seg.segment_type, SegmentKind::Mixed);
+    assert_eq!(
+        seg.format,
+        DataFormat::Avro,
+        "500 rows stay below the Parquet threshold"
+    );
+    assert_eq!(seg.level, 0);
     assert_eq!(seg.topics.len(), 50);
-    assert_eq!(svc.stats.segments_mixed.load(Ordering::Relaxed), 1);
+    assert_eq!(svc.stats.l0_avro_files.load(Ordering::Relaxed), 1);
 }
 
 #[tokio::test]
-async fn hot_topic_gets_topic_segments_and_quiet_ones_mixed() {
+async fn hot_topic_gets_own_parquet_files_and_quiet_ones_share_avro() {
     let source = Arc::new(MemorySource::new());
     source.create_topic("hot", 2);
-    source.create_topic("cold", 1);
+    for t in ["cold-a", "cold-b"] {
+        source.create_topic(t, 1);
+        for i in 0..5 {
+            source.produce(t, 0, record(i, t), 0);
+        }
+    }
     for i in 0..4000 {
         source.produce("hot", (i % 2) as i32, record(i, "hot"), 0);
     }
-    for i in 0..5 {
-        source.produce("cold", 0, record(i, "cold"), 0);
-    }
     let table = new_table().await;
-    let svc = IngestService::new(
-        table.clone(),
-        source.clone(),
-        config(100 << 10, Duration::ZERO),
-    );
+    let mut cfg = config(100 << 10, Duration::ZERO);
+    cfg.worker.l0_parquet_min_rows = 1000;
+    let svc = IngestService::new(table.clone(), source.clone(), cfg);
     run_until_idle(&svc).await;
     let snap = table.snapshot();
+    let mut saw_parquet = false;
+    let mut saw_mixed = false;
     for seg in snap.segments.values() {
-        match seg.segment_type {
-            SegmentKind::Topic => assert_eq!(seg.topics[0].topic, "hot"),
-            SegmentKind::Mixed => assert!(seg.topic("cold").is_some()),
+        if seg.topic("hot").is_some() {
+            assert_eq!(
+                seg.topics.len(),
+                1,
+                "hot topic data is never mixed with others"
+            );
+            if seg.format == DataFormat::Parquet {
+                saw_parquet = true;
+                assert_eq!(seg.pivot_keys, vec!["correlation-id", "source"]);
+            }
+        } else {
+            assert_eq!(seg.format, DataFormat::Avro);
+            saw_mixed |= seg.topics.len() == 2;
         }
     }
-    assert!(
-        snap.segments
-            .values()
-            .any(|s| s.segment_type == SegmentKind::Topic)
-    );
-    assert!(
-        snap.segments
-            .values()
-            .any(|s| s.segment_type == SegmentKind::Mixed)
+    assert!(saw_parquet && saw_mixed);
+    assert_eq!(
+        indexed(&table).await.values().map(Vec::len).sum::<usize>(),
+        4010
     );
 }
 

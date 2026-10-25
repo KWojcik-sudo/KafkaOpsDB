@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/kseg", "crates/table", "crates/ingest"]
+members = ["crates/model", "crates/table", "crates/ingest"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,7 +9,7 @@ license = "Apache-2.0"
 repository = "https://github.com/KWojcik-sudo/KafkaOpsDB"
 
 [workspace.dependencies]
-kseg = { path = "crates/kseg" }
+model = { path = "crates/model" }
 table = { path = "crates/table" }
 ingest = { path = "crates/ingest" }
 async-trait = "0.1"
@@ -26,14 +26,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 bytes = "1"
-crc32c = "0.6"
 thiserror = "2"
 uuid = { version = "1", features = ["v7", "serde"] }
-xxhash-rust = { version = "0.8", features = ["xxh64"] }
 zstd = "0.13"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "fs"] }
-arrow = "59.2"
-parquet = { version = "59.2", default-features = false, features = ["arrow", "zstd"] }
+arrow = { version = "59.2", default-features = false, features = ["prettyprint"] }
+arrow-avro = { version = "59.2", default-features = false, features = ["snappy"] }
+parquet = { version = "59.2", default-features = false, features = ["arrow", "async", "object_store", "snap", "zstd"] }
 proptest = "1"
 tempfile = "3"
 

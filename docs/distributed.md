@@ -39,17 +39,17 @@ bo po restarcie planner odtwarza wszystko ze snapshotu.
 
 {
   "task_id": "0192f5...",
-  "kind": "compact",
+  "kind": "promote_l2",            // compact_l0 | merge_l1 | promote_l2 | merge_l2 | retention
   "created_at": 1761379300000,
   "base_version": 1240,
   "inputs": ["0192e1...", "0192e2...", "0192e9..."],
-  "output": {"segment_type": "topic", "level": 1, "promote_topics": ["orders.v1"]}
+  "topic": "orders.v1"
 }
 ```
 
 - Task `ingest` może obejmować wiele topiców. Gorące topici dostają osobne taski, a chude są grupowane.
-  Worker stosuje politykę flusha `topic` / `mixed` w obrębie tasku i commituje wszystkie segmenty tasku
-  w jednym commicie z `commit_info.task_id`.
+  Worker zapisuje cały task jako jeden plik L0 i commituje go razem z offsetami w jednym commicie
+  z `commit_info.task_id`.
 - `end` jest ustalany przy planowaniu, więc task jest deterministyczny: ponowne wykonanie daje te same wiersze.
 - **Maksymalnie jeden task in-flight na partycję.** Commit tasku k+1 dla partycji wymaga, żeby task k już
   był zcommitowany (warunek `start == committed`). Równoległość wynika z liczby partycji i topiców.
